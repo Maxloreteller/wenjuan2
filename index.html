@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收入问卷与津贴评估</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        neutral: '#64748B',
+                        light: '#F1F5F9',
+                        dark: '#1E293B'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .question-card {
+                @apply bg-white rounded-xl shadow-lg p-6 transition-all duration-300 transform hover:shadow-xl;
+            }
+            .option-btn {
+                @apply w-full text-left p-4 mb-3 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50;
+            }
+            .btn-primary {
+                @apply bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary/50;
+            }
+            .btn-secondary {
+                @apply bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-gray-300;
+            }
+            .progress-bar {
+                @apply h-2 bg-gray-200 rounded-full overflow-hidden;
+            }
+            .progress-value {
+                @apply h-full bg-primary rounded-full transition-all duration-500 ease-out;
+            }
+            .firework {
+                @apply absolute pointer-events-none;
+            }
+            .back-home {
+                @apply fixed top-6 right-6 text-dark/60 hover:text-dark transition-colors duration-200 z-40 font-medium;
+            }
+            .clear-stats {
+                @apply absolute top-6 left-6 text-secondary hover:text-secondary/80 transition-colors duration-200 cursor-pointer z-40 text-2xl;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-light to-gray-200 min-h-screen font-sans text-dark relative">
+    <!-- 返回首页按钮 -->
+    <div id="back-home-btn" class="back-home">
+        <i class="fa fa-home mr-1"></i>返回首页
+    </div>
+
+    <!-- 页面容器 -->
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- 头部 -->
+        <header class="text-center mb-8">
+            <h1 class="text-[clamp(1.8rem,5vw,2.8rem)] font-bold text-dark mb-2">收入与津贴评估问卷</h1>
+            <p class="text-neutral text-lg">请根据您的实际情况完成以下问题，我们将为您评估适用的津贴方案</p>
+        </header>
+
+        <!-- 进度指示器 -->
+        <div class="mb-8">
+            <div class="flex justify-between text-sm text-neutral mb-2">
+                <span>开始</span>
+                <span>进行中</span>
+                <span>完成</span>
+            </div>
+            <div class="progress-bar">
+                <div id="progress" class="progress-value w-0"></div>
+            </div>
+        </div>
+
+        <!-- 问卷容器 -->
+        <div id="survey-container" class="mb-12">
+            <!-- 问题将通过JS动态插入 -->
+        </div>
+
+        <!-- 结果页面 (默认隐藏) -->
+        <div id="result-page" class="hidden question-card text-center">
+            <h2 class="text-2xl font-bold mb-4">您的评估结果</h2>
+            <div id="result-content" class="text-xl mb-6 py-4 border-y border-gray-100"></div>
+            <button id="restart-btn" class="btn-primary">
+                <i class="fa fa-refresh mr-2"></i>重新评估
+            </button>
+        </div>
+
+        <!-- 管理员统计页面 (默认隐藏) -->
+        <div id="admin-page" class="hidden question-card relative">
+            <!-- 清除统计数据按钮 -->
+            <div id="clear-stats-btn" class="clear-stats">
+                <i class="fa fa-smile-o"></i>
+            </div>
+            
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">津贴结果统计</h2>
+                <button id="close-admin" class="text-neutral hover:text-dark">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="h-64 mb-6">
+                <canvas id="results-chart"></canvas>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">津贴类型</th>
+                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">数量</th>
+                            <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">百分比</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-table-body">
+                        <!-- 统计数据将通过JS动态插入 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 密码输入框 (默认隐藏) -->
+        <div id="password-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full">
+                <h3 id="password-modal-title" class="text-xl font-bold mb-4">管理员访问</h3>
+                <p id="password-modal-desc" class="text-neutral mb-4">请输入密码查看统计数据</p>
+                <input type="password" id="admin-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="输入密码">
+                <div class="flex justify-end">
+                    <button id="cancel-password" class="btn-secondary mr-2">取消</button>
+                    <button id="submit-password" class="btn-primary">确认</button>
+                </div>
+                <p id="password-error" class="text-red-500 text-sm mt-2 hidden">密码错误，请重试</p>
+            </div>
+        </div>
+
+        <!-- 笑脸按钮 -->
+        <button id="smiley-btn" class="fixed bottom-6 right-6 bg-accent text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl transition-all duration-300 hover:scale-110 z-40">
+            <i class="fa fa-smile-o"></i>
+        </button>
+    </div>
+
+    <script>
+        // 问卷数据存储
+        const surveyData = {
+            currentStep: 0,
+            totalSteps: 0,
+            answers: {},
+            results: [], // 存储所有用户的结果，用于统计
+            passwordAction: null // 用于标识当前密码验证的目的
+        };
+
+        // 定义问卷结构
+        const questions = {
+            // 初始问题 - 年收入
+            initial: [
+                {
+                    id: 'income',
+                    text: '请选择您的年收入',
+                    type: 'radio',
+                    options: [
+                        { value: 'below10', text: '10万以下' },
+                        { value: '10to50', text: '10万到50万' },
+                        { value: '50to100', text: '50万到100万' },
+                        { value: 'above100', text: '100万以上' }
+                    ]
+                }
+            ],
+            
+            // 第一套问卷 - 年收入10万以下
+            below10: [
+                {
+                    id: 'identity',
+                    text: '请选择身份',
+                    type: 'radio',
+                    options: [
+                        { value: 'hk', text: '香港永居' },
+                        { value: 'mainland', text: '内地人才' }
+                    ]
+                },
+                {
+                    id: 'attendance',
+                    text: '您可否出勤',
+                    type: 'radio',
+                    options: [
+                        { value: 'yes', text: '可以出勤 (每周两次详情参照条款)' },
+                        { value: 'no', text: '不能出勤 (每周两次详情参照条款)' }
+                    ]
+                },
+                {
+                    id: 'education',
+                    text: '您的学历是什么',
+                    type: 'radio',
+                    options: [
+                        // 根据身份动态调整选项
+                        { value: 'basic', text: '持证基本学历' },
+                        { value: 'bachelor', text: '本科学历' },
+                        { value: 'postgraduate', text: '研究生及以上学历' }
+                    ]
+                }
+            ],
+            
+            // 第二套问卷 - 年收入10万到50万
+            '10to50': [
+                {
+                    id: 'identity',
+                    text: '请选择您的身份',
+                    type: 'radio',
+                    options: [
+                        { value: 'hk', text: '香港永居' },
+                        { value: 'mainland', text: '内地人才' }
+                    ]
+                },
+                {
+                    id: 'industry',
+                    text: '请选择您的行业',
+                    type: 'radio',
+                    options: [
+                        { value: 'bank', text: '银行及相关销售行业（至少2年）' },
+                        { value: 'insurance_high', text: '保险销售（至少2年）（年收入大于25万）' },
+                        { value: 'insurance_low', text: '保险销售（年收入小于25万）' },
+                        { value: 'other', text: '其他行业（abc都不符合）' }
+                    ]
+                },
+                {
+                    id: 'attendance',
+                    text: '您可否出勤',
+                    type: 'radio',
+                    options: [
+                        { value: 'yes', text: '可以出勤 (每周两次详情参照条款)' },
+                        { value: 'no', text: '不能出勤 (每周两次详情参照条款)' }
+                    ]
+                }
+            ],
+            
+            // 第三套问卷 - 年收入50万到100万
+            '50to100': [
+                {
+                    id: 'identity',
+                    text: '请选择您的身份',
+                    type: 'radio',
+                    options: [
+                        { value: 'hk', text: '香港永居' },
+                        { value: 'mainland', text: '内地人才' }
+                    ]
+                },
+                {
+                    id: 'attendance',
+                    text: '您可否出勤',
+                    type: 'radio',
+                    options: [
+                        { value: 'yes', text: '可以出勤 (每周两次详情参照条款)' },
+                        { value: 'no', text: '不能出勤 (每周两次详情参照条款)' }
+                    ]
+                },
+                {
+                    id: 'industry',
+                    text: '请选择您的行业',
+                    type: 'radio',
+                    options: [
+                        { value: 'bank', text: '银行及相关行业从业至少2年' },
+                        { value: 'insurance', text: '保险销售从业至少2年' },
+                        { value: 'other', text: '其他行业' }
+                    ]
+                }
+            ],
+            
+            // 第四套问卷 - 年收入100万以上
+            'above100': [
+                {
+                    id: 'identity',
+                    text: '请选择您的身份',
+                    type: 'radio',
+                    options: [
+                        { value: 'mainland', text: '内地人才' },
+                        { value: 'hk', text: '香港永居' }
+                    ]
+                },
+                {
+                    id: 'attendance',
+                    text: '您可否出勤',
+                    type: 'radio',
+                    options: [
+                        { value: 'yes', text: '可以出勤 (每周两次详情参照条款)' },
+                        { value: 'no', text: '不能出勤 (每周两次详情参照条款)' }
+                    ]
+                },
+                {
+                    id: 'industry',
+                    text: '请选择您的行业',
+                    type: 'radio',
+                    options: [
+                        { value: 'insurance', text: '保险销售行业，至少从业2年' },
+                        { value: 'bank', text: '其他银行及相关行业，至少从业2年' },
+                        { value: 'other', text: '其他行业' }
+                    ]
+                }
+            ]
+        };
+
+        // DOM元素
+        const surveyContainer = document.getElementById('survey-container');
+        const resultPage = document.getElementById('result-page');
+        const resultContent = document.getElementById('result-content');
+        const restartBtn = document.getElementById('restart-btn');
+        const progressBar = document.getElementById('progress');
+        const smileyBtn = document.getElementById('smiley-btn');
+        const passwordModal = document.getElementById('password-modal');
+        const adminPassword = document.getElementById('admin-password');
+        const submitPassword = document.getElementById('submit-password');
+        const cancelPassword = document.getElementById('cancel-password');
+        const passwordError = document.getElementById('password-error');
+        const passwordModalTitle = document.getElementById('password-modal-title');
+        const passwordModalDesc = document.getElementById('password-modal-desc');
+        const adminPage = document.getElementById('admin-page');
+        const closeAdmin = document.getElementById('close-admin');
+        const statsTableBody = document.getElementById('stats-table-body');
+        const backHomeBtn = document.getElementById('back-home-btn');
+        const clearStatsBtn = document.getElementById('clear-stats-btn');
+
+        // 初始化问卷
+        function initSurvey() {
+            surveyData.currentStep = 0;
+            surveyData.answers = {};
+            // 初始问题只有一个
+            surveyData.totalSteps = 1;
+            renderQuestion(questions.initial[0]);
+            updateProgress();
+        }
+
+        // 渲染问题
+        function renderQuestion(question) {
+            surveyContainer.innerHTML = '';
+            
+            const questionCard = document.createElement('div');
+            questionCard.className = 'question-card';
+            
+            const questionTitle = document.createElement('h2');
+            questionTitle.className = 'text-2xl font-bold mb-6';
+            questionTitle.textContent = question.text;
+            questionCard.appendChild(questionTitle);
+            
+            const optionsContainer = document.createElement('div');
+            optionsContainer.className = 'space-y-2';
+            
+            // 特殊处理：内地人才的学历选项只有两个
+            let optionsToRender = question.options;
+            if (question.id === 'education' && surveyData.answers.identity === 'mainland') {
+                optionsToRender = question.options.filter(option => 
+                    option.value !== 'basic'
+                );
+            }
+            
+            optionsToRender.forEach(option => {
+                const optionBtn = document.createElement('div');
+                optionBtn.className = 'option-btn';
+                optionBtn.innerHTML = `
+                    <label class="flex items-center cursor-pointer">
+                        <input type="${question.type}" name="${question.id}" value="${option.value}" class="mr-3 h-5 w-5 text-primary focus:ring-primary">
+                        <span>${option.text}</span>
+                    </label>
+                `;
+                optionsContainer.appendChild(optionBtn);
+            });
+            
+            questionCard.appendChild(optionsContainer);
+            
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'mt-8 flex justify-end';
+            
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'btn-primary';
+            nextBtn.innerHTML = '<i class="fa fa-arrow-right mr-2"></i>下一步';
+            nextBtn.addEventListener('click', () => handleAnswer(question.id));
+            
+            buttonContainer.appendChild(nextBtn);
+            questionCard.appendChild(buttonContainer);
+            
+            surveyContainer.appendChild(questionCard);
+            
+            // 添加动画效果
+            setTimeout(() => {
+                questionCard.classList.add('opacity-100');
+                questionCard.classList.remove('opacity-0', 'translate-y-4');
+            }, 50);
+        }
+
+        // 处理答案
+        function handleAnswer(questionId) {
+            const selectedOption = document.querySelector(`input[name="${questionId}"]:checked`);
+            
+            if (!selectedOption) {
+                // 显示错误提示
+                const optionsContainer = document.querySelector('.option-btn').parentNode;
+                const errorMsg = document.createElement('p');
+                errorMsg.className = 'text-red-500 text-sm mt-2';
+                errorMsg.textContent = '请选择一个选项';
+                optionsContainer.parentNode.appendChild(errorMsg);
+                
+                // 3秒后移除错误提示
+                setTimeout(() => {
+                    errorMsg.remove();
+                }, 3000);
+                return;
+            }
+            
+            // 保存答案
+            surveyData.answers[questionId] = selectedOption.value;
+            
+            // 检查是否需要跳转至结果或下一个问题
+            if (checkResultCondition()) {
+                showResult();
+                return;
+            }
+            
+            // 否则，继续下一个问题
+            surveyData.currentStep++;
+            updateProgress();
+            
+            // 确定下一个要显示的问题
+            let nextQuestion;
+            
+            if (surveyData.currentStep === 1 && questionId === 'income') {
+                // 第一步骤后，根据收入选择问卷
+                const income = surveyData.answers.income;
+                surveyData.totalSteps = 1 + questions[income].length;
+                nextQuestion = questions[income][0];
+            } else {
+                // 后续步骤
+                const income = surveyData.answers.income;
+                const currentQuestionIndex = questions[income].findIndex(q => q.id === questionId);
+                nextQuestion = questions[income][currentQuestionIndex + 1];
+            }
+            
+            renderQuestion(nextQuestion);
+        }
+
+        // 检查是否满足显示结果的条件
+        function checkResultCondition() {
+            const answers = surveyData.answers;
+            
+            // 第一套问卷 (10万以下)
+            if (answers.income === 'below10') {
+                // 香港永居选择不能出勤
+                if (answers.identity === 'hk' && answers.attendance === 'no') {
+                    return true;
+                }
+                
+                // 香港永居选择可以出勤且已回答学历问题
+                if (answers.identity === 'hk' && answers.attendance === 'yes' && answers.education) {
+                    return true;
+                }
+                
+                // 内地人才已回答学历问题
+                if (answers.identity === 'mainland' && answers.education) {
+                    return true;
+                }
+            }
+            
+            // 第二套问卷 (10万到50万)
+            if (answers.income === '10to50' && answers.attendance) {
+                return true;
+            }
+            
+            // 第三套问卷 (50万到100万)
+            if (answers.income === '50to100' && answers.industry) {
+                return true;
+            }
+            
+            // 第四套问卷 (100万以上)
+            if (answers.income === 'above100' && answers.industry) {
+                return true;
+            }
+            
+            return false;
+        }
+
+        // 计算并显示结果
+        function showResult() {
+            const answers = surveyData.answers;
+            let result = '';
+            
+            // 第一套问卷 (10万以下)
+            if (answers.income === 'below10') {
+                if (answers.identity === 'hk') {
+                    if (answers.attendance === 'no') {
+                        result = 'B+版津贴';
+                    } else {
+                        switch (answers.education) {
+                            case 'basic':
+                                result = 'A版津贴';
+                                break;
+                            case 'bachelor':
+                                result = 'C1津贴';
+                                break;
+                            case 'postgraduate':
+                                result = 'C2津贴';
+                                break;
+                        }
+                    }
+                } else if (answers.identity === 'mainland') {
+                    if (answers.education === 'bachelor') {
+                        result = 'D1';
+                    } else if (answers.education === 'postgraduate') {
+                        result = 'D2';
+                    }
+                }
+            }
+            
+            // 第二套问卷 (10万到50万)
+            else if (answers.income === '10to50') {
+                if (answers.industry === 'insurance_high') {
+                    result = '行业引进计划';
+                } else if (answers.industry === 'bank') {
+                    if (answers.attendance === 'yes') {
+                        result = 'D1-D5津贴';
+                    }
+                } else if (answers.industry === 'insurance_low') {
+                    if (answers.attendance === 'yes') {
+                        result = 'C1-C3津贴';
+                    }
+                } else if (answers.industry === 'other') {
+                    if (answers.identity === 'hk') {
+                        if (answers.attendance === 'no') {
+                            result = 'B+版津贴';
+                        } else {
+                            result = 'C3-C6津贴';
+                        }
+                    } else if (answers.identity === 'mainland') {
+                        result = 'D1-D5津贴';
+                    }
+                }
+            }
+            
+            // 第三套问卷 (50万到100万)
+            else if (answers.income === '50to100') {
+                if (answers.industry === 'insurance') {
+                    result = '行业引进计划';
+                } else if (answers.industry === 'bank' && answers.attendance === 'yes') {
+                    result = 'C7升级-C8升级津贴';
+                } else if (answers.industry === 'other') {
+                    if (answers.identity === 'hk' && answers.attendance === 'yes') {
+                        result = 'C6-C8津贴';
+                    } else if (answers.identity === 'mainland') {
+                        result = 'D5津贴，C6-C8津贴';
+                    }
+                }
+            }
+            
+            // 第四套问卷 (100万以上)
+            else if (answers.income === 'above100') {
+                if (answers.industry === 'insurance') {
+                    result = '行业引进计划';
+                } else if (answers.industry === 'bank' && answers.identity === 'hk' && answers.attendance === 'yes') {
+                    result = 'C8升级津贴';
+                } else if (answers.industry === 'other') {
+                    if (answers.identity === 'mainland') {
+                        result = '高端人才津贴方案';
+                    } else if (answers.identity === 'hk' && answers.attendance === 'yes') {
+                        result = 'C8津贴';
+                    }
+                }
+            }
+            
+            // 显示结果
+            resultContent.textContent = `您符合的津贴方案是：${result}`;
+            surveyContainer.classList.add('hidden');
+            resultPage.classList.remove('hidden');
+            
+            // 添加结果到统计
+            surveyData.results.push(result);
+            
+            // 创建烟花效果
+            createFireworks();
+        }
+
+        // 创建烟花效果
+        function createFireworks() {
+            const container = document.getElementById('result-page');
+            const fireworksCount = 15;
+            
+            for (let i = 0; i < fireworksCount; i++) {
+                setTimeout(() => {
+                    const firework = document.createElement('div');
+                    firework.className = 'firework';
+                    
+                    // 随机位置
+                    const x = Math.random() * 100;
+                    const y = Math.random() * 100;
+                    
+                    // 随机大小
+                    const size = Math.random() * 6 + 2;
+                    
+                    // 随机颜色
+                    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6'];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    
+                    firework.style.left = `${x}%`;
+                    firework.style.top = `${y}%`;
+                    firework.style.width = `${size}px`;
+                    firework.style.height = `${size}px`;
+                    firework.style.backgroundColor = color;
+                    firework.style.borderRadius = '50%';
+                    firework.style.boxShadow = `0 0 ${size * 5}px ${color}`;
+                    
+                    container.appendChild(firework);
+                    
+                    // 动画效果
+                    firework.animate([
+                        { opacity: 1, transform: 'scale(1)' },
+                        { opacity: 0, transform: `scale(${Math.random() * 3 + 1})` }
+                    ], {
+                        duration: Math.random() * 1000 + 1000,
+                        easing: 'cubic-bezier(0.1, 0.8, 0.9, 1)'
+                    });
+                    
+                    // 动画结束后移除
+                    setTimeout(() => {
+                        firework.remove();
+                    }, 2000);
+                }, i * 200);
+            }
+        }
+
+        // 更新进度条
+        function updateProgress() {
+            const progress = ((surveyData.currentStep + 1) / surveyData.totalSteps) * 100;
+            progressBar.style.width = `${progress}%`;
+        }
+
+        // 重新开始问卷
+        function restartSurvey() {
+            resultPage.classList.add('hidden');
+            initSurvey();
+        }
+
+        // 返回首页
+        function backToHome() {
+            resultPage.classList.add('hidden');
+            adminPage.classList.add('hidden');
+            initSurvey();
+        }
+
+        // 显示密码模态框
+        function showPasswordModal(action) {
+            // 设置密码验证目的
+            surveyData.passwordAction = action;
+            
+            // 根据不同目的设置模态框内容
+            if (action === 'viewStats') {
+                passwordModalTitle.textContent = '管理员访问';
+                passwordModalDesc.textContent = '请输入密码查看统计数据';
+            } else if (action === 'clearStats') {
+                passwordModalTitle.textContent = '清除统计数据';
+                passwordModalDesc.textContent = '请输入密码确认清除所有统计结果';
+            } else if (action === 'redirectLink') {
+                passwordModalTitle.textContent = '访问链接';
+                passwordModalDesc.textContent = '请输入密码访问总点击量链接';
+            }
+            
+            passwordModal.classList.remove('hidden');
+            adminPassword.focus();
+        }
+
+        // 隐藏密码模态框
+        function hidePasswordModal() {
+            passwordModal.classList.add('hidden');
+            adminPassword.value = '';
+            passwordError.classList.add('hidden');
+            surveyData.passwordAction = null;
+        }
+
+        // 验证密码并执行相应操作
+        function verifyPassword() {
+            const password = adminPassword.value.trim();
+            
+            // 根据不同操作验证不同密码
+            if (surveyData.passwordAction === 'viewStats' && password === '1234') {
+                hidePasswordModal();
+                showAdminStats();
+            } else if (surveyData.passwordAction === 'clearStats' && password === '0724') {
+                hidePasswordModal();
+                clearAllStats();
+            } else if (surveyData.passwordAction === 'redirectLink' && password === '1145') {
+                hidePasswordModal();
+                // 跳转到总点击量链接
+                window.location.href = 'https://example.com/total-clicks'; // 替换为实际链接
+            } else {
+                passwordError.classList.remove('hidden');
+                adminPassword.focus();
+            }
+        }
+
+        // 显示管理员统计页面
+        function showAdminStats() {
+            surveyContainer.classList.add('hidden');
+            resultPage.classList.add('hidden');
+            adminPage.classList.remove('hidden');
+            renderStats();
+        }
+
+        // 清除所有统计数据
+        function clearAllStats() {
+            if (confirm('确定要清除所有统计结果吗？此操作不可恢复。')) {
+                surveyData.results = [];
+                renderStats();
+                alert('所有统计数据已清除');
+            }
+        }
+
+        // 渲染统计数据
+        function renderStats() {
+            // 计算结果统计
+            const stats = {};
+            surveyData.results.forEach(result => {
+                if (stats[result]) {
+                    stats[result]++;
+                } else {
+                    stats[result] = 1;
+                }
+            });
+            
+            const total = surveyData.results.length;
+            
+            // 清空表格
+            statsTableBody.innerHTML = '';
+            
+            // 填充表格
+            Object.entries(stats).forEach(([result, count]) => {
+                const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-100 hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="py-3 px-4">${result}</td>
+                    <td class="py-3 px-4">${count}</td>
+                    <td class="py-3 px-4">${percentage}%</td>
+                `;
+                statsTableBody.appendChild(row);
+            });
+            
+            // 如果没有数据
+            if (total === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td colspan="3" class="py-4 px-4 text-center text-neutral">暂无数据</td>
+                `;
+                statsTableBody.appendChild(row);
+            }
+            
+            // 绘制图表
+            renderChart(stats, total);
+        }
+
+        // 绘制图表
+        function renderChart(stats, total) {
+            const ctx = document.getElementById('results-chart').getContext('2d');
+            
+            // 销毁现有图表
+            if (window.resultChart) {
+                window.resultChart.destroy();
+            }
+            
+            // 准备图表数据
+            const labels = Object.keys(stats);
+            const data = Object.values(stats);
+            const backgroundColors = [
+                'rgba(59, 130, 246, 0.7)',
+                'rgba(16, 185, 129, 0.7)',
+                'rgba(245, 158, 11, 0.7)',
+                'rgba(236, 72, 153, 0.7)',
+                'rgba(139, 92, 246, 0.7)',
+                'rgba(239, 68, 68, 0.7)',
+                'rgba(251, 146, 60, 0.7)',
+                'rgba(107, 114, 128, 0.7)'
+            ];
+            
+            // 创建新图表
+            window.resultChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors.slice(0, labels.length),
+                        borderColor: backgroundColors.slice(0, labels.length).map(color => 
+                            color.replace('0.7', '1')
+                        ),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 15,
+                                padding: 15
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: `总参与人数: ${total}`,
+                            font: {
+                                size: 16
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 事件监听
+        restartBtn.addEventListener('click', restartSurvey);
+        smileyBtn.addEventListener('click', () => showPasswordModal('redirectLink'));
+        cancelPassword.addEventListener('click', hidePasswordModal);
+        submitPassword.addEventListener('click', verifyPassword);
+        closeAdmin.addEventListener('click', initSurvey);
+        backHomeBtn.addEventListener('click', backToHome);
+        clearStatsBtn.addEventListener('click', () => showPasswordModal('clearStats'));
+        
+        // 密码框回车提交
+        adminPassword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                verifyPassword();
+            }
+        });
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', initSurvey);
+    </script>
+</body>
+</html>
